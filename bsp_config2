@@ -1,0 +1,28 @@
+stream {
+       mode = kernel;
+       ip {
+               dst = 131.188.37.156;
+               src = 131.188.37.230;
+       }
+
+       udp {
+               sport = 8000;
+               dport = 8002;
+
+       }
+
+       traffic {
+
+               #send 20 packets each 1000 bytes, wait 1.0 second
+               #repeat this pattern 3 times
+               burst {
+                       send_packets = 2;
+                       size = 100;
+                       delay = 0.0;
+                       repeat = 0;
+
+               }
+
+               repeat = 3;
+       }
+}

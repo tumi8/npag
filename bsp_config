@@ -1,0 +1,63 @@
+
+
+# eine Raute leitet Kommentare ein
+
+
+
+#erster Verkehrsstrom
+stream {
+	mode = raw; # Verwende raw sockets (nicht die 
+	            # Kernimplemenrierung der Protokolle)
+	#mode = kernel; 
+	
+	tcp {
+		sport = 5000;
+		dport = 5001;
+		seq = 12345;
+		acknum = 56789;
+		win = 1000;
+		syn = 1;
+		ack = 1;
+		#push = 1;
+		#fin = 1;
+		#rst = 1;
+	}
+	
+	ip {
+		src = 192.168.0.20;
+		dst = 192.168.0.20;
+		id = 12345;
+		ttl = 100;
+		#version = 4; 
+		#rf = 1; #flag
+		#df = 1; #flag dont fragment
+		#mf = 1; #fag more fragments
+		#off = 20; #offset
+	}
+	
+	traffic {
+		burst {
+			send_packets = 2;
+			size = 1000;
+			repeat = 2;
+			delay = 0.2;
+		}
+		burst {
+			send_packets = 1;
+			size = 1000;
+			repeat = 0;
+			delay = 0.1;
+		}
+		
+	}
+}
+
+
+#zweiter Verkehrsstrom
+
+#stream {
+#	mode = raw;
+#	tcp {
+#	...
+#}
+
