@@ -29,7 +29,7 @@ typedef enum net_type net_type_t;
 
 
 
-#define MAXFILENAME 20
+#define MAXFILENAME 255
 
 enum e_format {HEX = 1, BYTE };
 //#include "npag.h"
