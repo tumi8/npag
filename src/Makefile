@@ -23,4 +23,4 @@ npag_rec.o: npag_rec.c
 	$(CC) $(CFLAGS) -c npag_rec.c
 	
 clean:
-	/bin/rm $(PROG) $(PROG2)  $(OBJS) 
+	/bin/rm $(PROG) $(PROG2) $(PROG2).o $(OBJS) 
