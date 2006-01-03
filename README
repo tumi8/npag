@@ -1,0 +1,205 @@
+Npag - Network Packet Generator
+Copyright (C) 2005 Christian Bannes, University of Tübingen, Germany 
+
+What is npag?
+
+npag is a performance measurement and packet generation tool. Unlike many other 
+free available tools npag is capable of generating TCP, UDP, ICMP, ICMPv6, IPv4 
+and IPv6 traffic where the frames can be totally defined by the user. Network 
+devices must be able to receive traffic from multiple sources. To take account 
+of this fact npag provides multiple parallel streams. 
+
+npag has the capability of measuring both UDP and TCP performance. It is not 
+only possible to measure the maximum throughput but it is also possible to 
+change the sending rate of each sending entity during a measurement. Besides 
+measuring the throughput npag can determine the latency and packet loss. 
+Specifying a packet header and stream description can be very complex. To 
+facilitate the specification npag provides an easy to lean script language. 
+By this means it is easy to write a complex description with a simple command 
+file. 
+
+Npag can be used as packet generator or as a UDP/TCP performance measurement 
+tool. As a packet generator npag is capable of creating parallel TCP, UDP, ICMP, 
+ICMPv6, IPv4 and IPv6 streams. These streams are specified in a configuration 
+file using an easy to learn script language.
+
+To use npag as a performance measurement tool you have to start a server on the 
+host you are supposed to send the stream to. Use the tool npag_rec to start the 
+server and the tool npag to send packets to the server. If you want to send 
+packets without measuring performance parameters you only need the packet 
+generator npag.
+
+
+How do I start the server?
+
+If you want to use npag as a performance measurement tool you have to start a 
+server that receives packets send by the packet generator. As a result the 
+server outputs the throughput, delay and packet losses. Start the server by 
+typing
+
+npag_rec [interface_addr]
+
+
+How do I use the packet generator?
+
+The packet generator uses a configuration file which specifies streams. To start 
+the packet generator use
+
+npag -f [config file] [-options]
+
+Options:
+    -v verbose output
+    -vv even more output
+    -o [filename] specifies an output filename. Raw packets are printed into the 
+file in HEX format 
+
+
+
+
+How do I write a configuration file?
+
+npag uses an easy to learn script language to specify streams. The following 
+parameters characterize a stream:
+
+    * sender
+    * receiver
+    * protocols to be used (e.g. IP and TCP)
+    * traffic flow
+
+Each of these parameters has to be specified in a stream description. The best 
+way to understand the language is by an example:
+
+#first stream description
+	
+stream { 	
+	mode=raw; 	
+	#ip parameters 	
+	ip { 	
+		src=192.168.0.1;
+		dst=192.168.0.2;
+	} 	
+	#tcp parameters 	
+	tcp { 	
+		sport=5000;
+		dport=5001;
+	} 	
+	#traffic description 	
+	traffic { 	
+		burst {
+			send_packets=10;
+			size=100;
+			delay=0.5;
+			repeat=1;
+		}
+		burst {
+			send_packets=5
+			size=200;
+			delay=0.1;
+			repeat=2;
+		}
+	} 	
+} 		
+
+#second stream description
+stream { 	
+	... 	
+} 		
+
+This example specifies two streams that are send in parallel. The maximum number 
+of parallel streams is not limited by npag but is limited by the operating 
+system.
+
+The first parameter mode is set to raw. This indicates that raw sockets should 
+be used to build packets instead of the kernel implementation of the TCP, UDP or 
+IP protocols. It is then possible to set some header fields which you cannot set 
+when using the kernel's implementation (e.g. the SYN flag in the TCP header).
+Note, if you want to use npag as a performance measurement tool you have to set 
+mode to kernel to use the kernel's implementation of the protocols because this 
+is what you are supposed to measure.
+
+The first stream is a TCP/IP stream. The sender's and receiver's IP addresses 
+are specified in the IP block and the port numbers are specified in the TCP 
+block.
+
+The traffic description is located as you guess in the traffic block. It is 
+characterized by bursts. The first burst consists of 10 packets each 100 bytes 
+in size. After the packets are sent there is a delay of 0.5 seconds before the 
+burst is repeated once (as the parameter repeat=1 indicates).
+
+Now the next burst is started with 5 packets each 200 bytes in size and a delay 
+of 0.1 seconds. Because the parameter repeat is set to 2 this burst is repeated 
+twice.
+
+Next is a description of all possible blocks and its parameters you can use.
+
+Parameters in an ip block: 	
+	src 	source address
+	dst 	destination address
+	tos 	type of service
+	id 	identification number
+	ttl 	time to live
+	rf 	fragment bit
+	df 	don't fragment bit
+	mf 	more fragments
+	hlength 	header length
+	off 	offset
+
+
+Parameters in an ip6 block: 	
+	src 	source address
+	dst 	destination address
+	hoplimit 	as the name indicates
+	interface 	interface name
+
+
+Parameters in a tcp block: 	
+	sport 	source address
+	dport 	destination address
+	mss 	maximum segment size
+	win 	window size
+	seq 	sequence number
+	acknum 	acknowledgement number
+	syn 	SYN flag
+	push 	PUSH flag
+	urg 	URG flag
+	fin 	FIN flag
+	rst 	RST flag
+
+
+Parameters in a udp block: 	
+	src 	source address
+	dst 	destination address
+	tos 	type of service
+	id 	identification number
+	ttl 	time to live
+
+
+Parameters in a icmp block: 	
+	type 	type of icmp message
+	code 	code if icmp message
+	id 	identification number
+	seq 	sequence number
+	pointer 	pointer
+	gw_addr 	gateway address
+
+
+Parameters in a icmp6 block: 	
+	type 	type of icmp message
+	code 	code of icmp message
+	mtu 	maximum transfer unit
+	pointer 	pointer
+	id 	identification number
+	seq 	sequence number
+
+
+As mentioned before the traffic is characterized by bursts. A burst block always 
+appears in a traffic block. Next is a description of the parameters you can use 
+in a burst block:
+
+Parameters in a burst block: 	
+	send_packets 	number of packets to be sent
+	delay 	delay time after the packets have been sent
+	repeat	number of times the burst should be repeated
+	size 	packet size in byte
+	filename 	filename the payload should be read from
+
