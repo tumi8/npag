@@ -26,6 +26,7 @@ typedef struct protocol_functions {
 	void (*set_nethdr)(packet_buffer_t*, config_t*);
 	void (*set_transhdr)(packet_buffer_t*, config_t*);
 	void (*init_socket) (sock_descriptor_t *fd, config_t *conf);
+     void (*rand_hdr)(packet_buffer_t*);
 } protofunc_t;
 
 
@@ -50,6 +51,7 @@ void set_transhdr_NOT_DEFINED	__P(());
 void init_socket_NOT_DEFINED	__P(());
 void sectotv				__P((double sec, struct timeval *tv));
 void wait_timeval			__P((struct timeval *tv));
+void wait_timeval_ext		__P((struct timeval *, struct timeval *));
 void init_generator			__P((protofunc_t *gen, config_t *conf));
 void send_raw				__P((packet_buffer_t*, config_t*, protofunc_t*, int));
 void send_kernel			__P((packet_buffer_t*, config_t*, protofunc_t*, int));

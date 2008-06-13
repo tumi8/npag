@@ -102,7 +102,7 @@ u_int16_t tcp_checksum(u_int8_t proto,char *packet,int len, struct addrinfo *ai_
 		pseudo6.source = src6->sin6_addr;
 		pseudo6.dest = dst6->sin6_addr;
 
-		pseudo_pkt = (char*) cmalloc( sizeof(pseudo6)+len );
+		pseudo_pkt = cmalloc( sizeof(pseudo6)+len );
 
 		memcpy(pseudo_pkt,&pseudo6,sizeof(pseudo6));
 		memcpy((pseudo_pkt+sizeof(pseudo6)),packet,len);
@@ -124,7 +124,7 @@ u_int16_t tcp_checksum(u_int8_t proto,char *packet,int len, struct addrinfo *ai_
 
 
 
-		pseudo_pkt = (char*)cmalloc(sizeof(pseudo4)+len);
+		pseudo_pkt = cmalloc(sizeof(pseudo4)+len);
 		
 
 		memcpy(pseudo_pkt,&pseudo4,sizeof(pseudo4));

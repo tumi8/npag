@@ -67,6 +67,7 @@ typedef struct sender {
 	void (*set_buf)();
 	int (*send)();
 	void (*leave)();	
+    void (*rand_hdr)();
 	
 	/* it would be nicer to realize these variables as globals because 
 	   nearly every function is using them. The problem is that globals are 
@@ -164,6 +165,7 @@ void kernel_set_buf(packet_buffer_t *buffer, pattern_t *pattern, config_t *conf,
 			sender->msg_iov.iov_len = p_buf->data_size + sender->ah.mysize;
 }
 
+
 int raw_send(config_t *conf, packet_buffer_t *p_buf, sock_descriptor_t fd, sender_t *sender) {
 					int nbytes;
 					
@@ -171,6 +173,7 @@ int raw_send(config_t *conf, packet_buffer_t *p_buf, sock_descriptor_t fd, sende
 					nbytes = sendmsg(fd,&sender->msgh, 0  );
 
 
+                    // log output to a file
 					if(out) {
 						if(conf->net_proto_type == TYPE_IP6) {
 							p_buf->data_size += 40;
@@ -311,6 +314,9 @@ void* exec_thread(void *p) {
 		//send_kernel(&sendinfo, conf, &gen, th_id);
 		sender_init(&sender, 1);
 	}
+
+    sender.rand_hdr = gen->rand_hdr;
+
 	send_traffic(&sender, &p_buf, conf, gen, th_id);
 	//send_raw_2(&sendinfo, conf, gen, th_id);
 	/* TODO change this */
@@ -332,35 +338,48 @@ void send_traffic(sender_t *sender, packet_buffer_t *p_buf, config_t *conf, prot
 
 	sender->init(p_buf, conf, gen, sender);
 
+    // we wanna have accurate starting time of data stream for statistics, so
+    // let's see if the time was already initialized and init it ourselves
+    if (!stat_starttime.tv_sec) gettimeofday(&stat_starttime, 0);
+
 	for(l = 0; l < traffic->repeat + 1; l++) {
 		pattern = traffic->pattern;
-		while(pattern != NULL) {
-			
-			sectotv(pattern->delay, &sender->delay_tv);
-			sender->set_buf(p_buf, pattern, conf, gen, p_buf, sender);
-					
-				for(j = 0; j < pattern->repeat + 1; ++j) {
-					sender->tv = sender->delay_tv; /* tv is overwritten by wait_timeval in LINUX */
-	 				i = 0;
-	
-					if(verbose)
-						fprintf(stdout,"Thread %i starts sending...\n",th_id);
- 					for(i = 0; i < pattern->send_packets; ++i) {
- 				
-						nbytes = sender->send(conf, p_buf, fd, sender);						
-					
-						if(nbytes == -1) perror("send");
-						if(verbose > 1)
-							printf("%i: %i bytes written\n", th_id,nbytes);
-					}
+        struct timeval bursttime;
+        if (gettimeofday(&bursttime, 0) != 0)
+            perror("failed to call gettimeofday");
+        while(pattern != NULL) {
 
- 					if(verbose)
-							fprintf(stdout,"Thread %i is waiting %f seconds\n",th_id, pattern->delay);
- 				
- 						wait_timeval(&sender->tv); 	
- 										
-				}/* repeat pattern */
-				pattern = pattern->next;
+            sectotv(pattern->delay, &sender->delay_tv);
+            sender->set_buf(p_buf, pattern, conf, gen, p_buf, sender);
+
+            for(j = 0; j < pattern->repeat + 1; ++j) {
+                sender->tv = sender->delay_tv; /* tv is overwritten by wait_timeval in LINUX */
+                i = 0;
+
+                if(verbose)
+                    fprintf(stdout,"Thread %i starts sending...\n",th_id);
+                for(i = 0; i < pattern->send_packets; ++i) {
+
+                    // modify packet with random variations
+                    if (sender->rand_hdr) sender->rand_hdr(conf, p_buf, fd, sender);
+                    // send packet to network
+                    nbytes = sender->send(conf, p_buf, fd, sender);						
+                    // collect statistics
+                    stat_psentcount++;
+                    stat_psentsize += nbytes;
+
+                    if(nbytes == -1) perror("send");
+                    if(verbose > 1)
+                        printf("%i: %i bytes written\n", th_id,nbytes);
+                }
+
+                if(verbose)
+                    fprintf(stdout,"Thread %i is waiting %f seconds\n",th_id, pattern->delay);
+
+                wait_timeval_ext(&sender->tv, &bursttime); 	
+
+            }/* repeat pattern */
+            pattern = pattern->next;
 				
 		}/* next pattern */
 		if(l  != traffic->repeat  && verbose > 0) 
@@ -384,8 +403,8 @@ void send_traffic(sender_t *sender, packet_buffer_t *p_buf, config_t *conf, prot
 
 
 void init_sendinfo(packet_buffer_t *p_buf) {
-	p_buf->fd = (int*) cmalloc(sizeof(int));
-	p_buf->border = (char*) cmalloc(sizeof(char) * 65536);
+	p_buf->fd = cmalloc(sizeof(int));
+	p_buf->border = cmalloc(sizeof(char) * 65536);
 	p_buf->allocated_space = 65536;
 	p_buf->data_size = 0;
 	p_buf->data_ptr = p_buf->border + p_buf->allocated_space;
@@ -446,9 +465,42 @@ void sectotv(double sec, struct timeval *tv) {
 
 
 
+void wait_timeval(struct timeval *towait) 
+{
+  select(1, (fd_set *)0, (fd_set *)0, (fd_set *)0, (towait));
+}
 
-void wait_timeval(struct timeval *tv) {
-  select(1, (fd_set *)0, (fd_set *)0, (fd_set *)0, (tv));
+/**
+ * sleeps until time lastburst+towait is reached
+ */
+void wait_timeval_ext(struct timeval *towait, struct timeval* lastburst) 
+{
+    static int cpu_warning_issued = 0;
+    static int cpu_slowcycles = 0;
+    // calculate time, when next burst should be started
+    struct timeval endtime;
+    endtime.tv_sec = towait->tv_sec + lastburst->tv_sec;
+    endtime.tv_usec = towait->tv_usec + lastburst->tv_usec;
+    if (endtime.tv_usec > 1000000) {
+        endtime.tv_usec -= 1000000;
+        endtime.tv_sec++;
+    }
+    struct timeval curtime;
+    if (gettimeofday(&curtime, 0) != 0) perror("failed to call gettimeofday");
+    struct timeval difftime;
+    if (timeval_subtract(&difftime, &endtime, &curtime) == 1) {
+        cpu_slowcycles++;
+        // if the CPU is too slow, issue warning
+        // but we wait a few packet bursts first, as the code needs to be loaded into the CPU's cache
+        if (cpu_slowcycles>100 && !cpu_warning_issued) {
+            cpu_warning_issued = 1;
+            fprintf(stderr, "WARNING: CPU is too slow to send packets in time, no more warnings will be issued\n");
+        }
+    } else {
+        //printf("difftime: %d sec, %d usec\n", difftime.tv_sec, difftime.tv_usec);
+        select(1, (fd_set *)0, (fd_set *)0, (fd_set *)0, &difftime);
+    }
+    if (gettimeofday(lastburst, 0) != 0) perror("failed to call gettimeofday");
 }
 /*
 
@@ -480,6 +532,7 @@ void init_socket_NOT_DEFINED() {
 	void *net;
 	void *trans;
 	void *sock_init;
+    void *rand_hdr;
 	
 	void *next; //next 	
 }rnode_head;
@@ -490,14 +543,14 @@ void reg_table_init() {
 	rnode_head.next = NULL;	
 }
 
-void reg_proto(int kernel, int trans_type, int net_type, void *trans, void *net, void *sock_init) {
+void reg_proto(int kernel, int trans_type, int net_type, void *trans, void *net, void *sock_init, void *rand_hdr) {
 	struct reg_node *rnode = &rnode_head;
 	
 	while(rnode->next != NULL) {
 		rnode = rnode->next;
 	}
 	
-	rnode->next = (struct reg_node*) cmalloc(sizeof(struct reg_node));
+	rnode->next = cmalloc(sizeof(struct reg_node));
 	rnode = rnode->next;
 	
 	//fprintf(stderr, "inserting: kernel: %i, trans_type %i, net_type %i\n", kernel, trans_type, net_type);
@@ -508,6 +561,7 @@ void reg_proto(int kernel, int trans_type, int net_type, void *trans, void *net,
 	rnode->trans = trans;
 	rnode->net = net;
 	rnode->sock_init = sock_init;
+    rnode->rand_hdr = rand_hdr;
 }
 
 protofunc_t*  get_functions(int kernel, int trans_type, int net_type) {
@@ -516,10 +570,11 @@ protofunc_t*  get_functions(int kernel, int trans_type, int net_type) {
 		functions = NULL;
 		while(rnode != NULL) {
 			if(rnode->kernel == kernel && rnode->trans_type == trans_type && rnode->net_type == net_type) {
-					functions = (protofunc_t*) cmalloc(sizeof(protofunc_t));
+					functions = cmalloc(sizeof(protofunc_t));
 					functions->set_nethdr = rnode->net;
 					functions->set_transhdr = rnode->trans;
 					functions->init_socket = rnode->sock_init;
+                    functions->rand_hdr = rnode->rand_hdr;
 				//	fprintf(stderr, "function found\n");
 				 	break;
 			}
@@ -540,20 +595,20 @@ void register_functions() {
 	/* registrations */
 	
 	/* kernel */
-	reg_proto(1, TYPE_TCP, TYPE_IP4, set_tcpsockopts, set_ipsockopts, init_tcpsocket);
-	reg_proto(1, TYPE_TCP, TYPE_IP6, set_tcpsockopts, set_ipsockopts, init_tcpip6socket);
-	reg_proto(1,TYPE_UDP, TYPE_IP4, set_udpsockopts, set_ipsockopts, init_udpsocket);
-	reg_proto(1, TYPE_UDP, TYPE_IP6, set_udpsockopts, set_ipsockopts, init_udpip6socket);
+	reg_proto(1, TYPE_TCP, TYPE_IP4, set_tcpsockopts, set_ipsockopts, init_tcpsocket, NULL);
+	reg_proto(1, TYPE_TCP, TYPE_IP6, set_tcpsockopts, set_ipsockopts, init_tcpip6socket, NULL);
+	reg_proto(1,TYPE_UDP, TYPE_IP4, set_udpsockopts, set_ipsockopts, init_udpsocket, NULL);
+	reg_proto(1, TYPE_UDP, TYPE_IP6, set_udpsockopts, set_ipsockopts, init_udpip6socket, NULL);
 	
 	/* raw */
 	
-	reg_proto(0, TYPE_TCP, TYPE_IP4, fill_tcphdr, fill_ip4hdr, init_rawsocket);
-	reg_proto(0, -1, TYPE_IP4, empty, fill_ip4hdr, init_rawsocket);
-	reg_proto(0, TYPE_TCP, TYPE_IP6, fill_tcphdr, fill_ip6hdr, init_rawsocket6);
-	reg_proto(0, TYPE_UDP, TYPE_IP4, fill_udphdr, fill_ip4hdr, init_rawsocket);
-	reg_proto(0, TYPE_UDP, TYPE_IP6, fill_udphdr, fill_ip6hdr, init_rawsocket6);
-	reg_proto(0, TYPE_ICMP, TYPE_IP4, fill_icmphdr, fill_ip4hdr, init_rawsocket);
-	reg_proto(0, TYPE_ICMP6, TYPE_IP6, fill_icmp6hdr, fill_ip6hdr, init_rawsocket6);	
+	reg_proto(0, TYPE_TCP, TYPE_IP4, fill_tcphdr, fill_ip4hdr, init_rawsocket, rand_tcp);
+	reg_proto(0, -1, TYPE_IP4, empty, fill_ip4hdr, init_rawsocket, NULL);
+	reg_proto(0, TYPE_TCP, TYPE_IP6, fill_tcphdr, fill_ip6hdr, init_rawsocket6, NULL);
+	reg_proto(0, TYPE_UDP, TYPE_IP4, fill_udphdr, fill_ip4hdr, init_rawsocket, NULL);
+	reg_proto(0, TYPE_UDP, TYPE_IP6, fill_udphdr, fill_ip6hdr, init_rawsocket6, NULL);
+	reg_proto(0, TYPE_ICMP, TYPE_IP4, fill_icmphdr, fill_ip4hdr, init_rawsocket, NULL);
+	reg_proto(0, TYPE_ICMP6, TYPE_IP6, fill_icmp6hdr, fill_ip6hdr, init_rawsocket6, NULL);	
 	
 
 	//fprintf(stderr, "registration completed\n");

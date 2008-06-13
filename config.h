@@ -1,7 +1,7 @@
 /*
  * This file is part of
  * npag - Network Packet Generator
- * Copyright (C) 2005 Christian Bannes, University of Tübingen,
+ * Copyright (C) 2005 Christian Bannes, University of Tï¿½bingen,
  * Germany
  * 
  * npag is free software; you can redistribute it and/or
@@ -107,8 +107,11 @@ typedef struct ip4conf {
 	int *protocol;		/* upper layer protocol */
 	
 	/* source and destination address */
-	char src[16];
-	char dst[16];
+	int src;
+	int dst;
+	/* masks for source and destination IPs - when bits are zero, they are replaced by random data */
+	int src_mask;
+	int dst_mask;
 
 	int *trans_proto_num;
 }ip4conf_t;
@@ -120,7 +123,11 @@ typedef struct tcpconf {
 	BOOL nodelay;	/* enable or disable nagel?s algorithm */
 
 	int sport;		
+	int sport_low;  /* if this is nonzero, a random port between sport_low and sport_high is chosen for each packet */
+	int sport_high;		
 	int dport;		
+	int dport_low;	/* if this is nonzero, a random port between dport_low and dport_high is chosen for each packet */
+	int dport_high;		
 	int seq;		
 	int ack;		
 	int win;		
@@ -216,4 +223,11 @@ typedef struct config {
 } config_t;
 
 
+/* variables for our statistics */
+extern uint stat_psentcount;    // total number of sent packets
+extern uint stat_psentsize;     // total size of sent data
+extern struct timeval stat_starttime;   // starting time of the first data sending ... this is set send_traffic()
 
+
+/* global functions */
+extern int timeval_subtract (struct timeval* result, struct timeval* x, struct timeval* y);

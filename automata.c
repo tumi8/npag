@@ -185,7 +185,7 @@ void add_state(int new_state, void *init_f, void *read_f, void *check_f) {
 		while(node->next != NULL)
 			node = node->next;
 			
-		node->next = (struct s_node*) cmalloc(sizeof(struct s_node));
+		node->next = cmalloc(sizeof(struct s_node));
 		node = node->next;
 		node->state = new_state;
 		
@@ -206,7 +206,7 @@ void add_change_state(int from_state, char *keyword, int to_state) {
 	while(change->next != NULL) 
 		change = change->next;
 		
-	change->next = (struct s_change*) cmalloc(sizeof(struct s_change));
+	change->next = cmalloc(sizeof(struct s_change));
 	change = change->next;
 	change->from_state = from_state;
 	change->keyword = keyword;

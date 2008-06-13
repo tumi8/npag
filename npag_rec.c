@@ -74,7 +74,7 @@ static void usage() {
 	printf("\nUsage: npag_rec [interface address] [-options]\n"\
 	       "       npag_rec host [-options]\n\n" \
 	       "interface address: address to bind\n" \
-	       "Options:\n" \ 
+	       "Options:\n" \
 	       "\t -u    receive UDP packets\n" \
 	       "\t -t    receive TCP packets\n"
 	       "\t -p##  portnumber to listen at\n\n");
@@ -599,7 +599,8 @@ void tvsqr(struct timeval *tv) {
 	tv->tv_usec *= tv->tv_usec;
 
 	while((unsigned long)tv->tv_usec > 1000000) {
-		tv->tv_sec++;  (unsigned long)tv->tv_usec -= 1000000;
+		tv->tv_sec++;  
+        tv->tv_usec -= 1000000;
 	}
 }
 

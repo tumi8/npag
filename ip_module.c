@@ -1,7 +1,7 @@
 /*
  * This file is part of
  * npag - Network Packet Generator
- * Copyright (C) 2005 Christian Bannes, University of Tübingen,
+ * Copyright (C) 2005 Christian Bannes, University of Tï¿½bingen,
  * Germany
  * 
  * npag is free software; you can redistribute it and/or
@@ -76,7 +76,8 @@ void init_rawsocket(sock_descriptor_t *fd, config_t *conf) {
 	
 	dst_addr.sin_family = AF_INET;
 	dst_addr.sin_port = 0;
-	inet_aton(ipconf->dst, &dst_addr.sin_addr);
+	struct in_addr in = { ipconf->dst };
+	dst_addr.sin_addr = in;
 	memset(&dst_addr.sin_zero, '0', 8);
 		
 	ret = connect(*fd, (struct sockaddr*)&dst_addr, sizeof(struct sockaddr));
@@ -114,10 +115,12 @@ void fill_ip4hdr(packet_buffer_t *sendinfo, config_t *conf) {
 	iph->ip_p = *ipconf->protocol;
 	iph->ip_sum = 0;
 
-	inet_aton(ipconf->src, &iph->ip_src);
-	inet_aton(ipconf->dst, &iph->ip_dst);
+	struct in_addr sin = { ipconf->src };
+	struct in_addr din = { ipconf->dst };
+	iph->ip_src = sin;
+	iph->ip_dst = din;
 	
-	iph->ip_sum =  checksum(iph, 20);	
+	iph->ip_sum =  checksum((u_int16_t*)iph, 20);	
 }
 
 

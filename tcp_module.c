@@ -1,7 +1,7 @@
 /*
  * This file is part of
  * npag - Network Packet Generator
- * Copyright (C) 2005 Christian Bannes, University of Tübingen,
+ * Copyright (C) 2005 Christian Bannes, University of Tï¿½bingen,
  * Germany
  * 
  * npag is free software; you can redistribute it and/or
@@ -24,10 +24,12 @@
 #include <sys/socket.h>
 #include <stdio.h>
 #include <netinet/tcp.h>
+#include <netinet/ip.h>
 #include <netinet/in.h> //IPPROTO
 #include <arpa/inet.h> //inet_pton
 #include <string.h> //memset
 #include <net/if.h> //map interface to index
+#include <stdlib.h>
 #include "sendinfo.h"
 #include "packet_buffer.h"
 #include "config.h"
@@ -42,6 +44,7 @@ void 			__P(set_payload());
 void 			__P(check_warning());
 typedef int sock_descriptor_t;
 
+typedef unsigned short ushort;
 
 
 
@@ -87,12 +90,14 @@ void init_tcpsocket(sock_descriptor_t *fd, config_t *conf){
 	
 	dst_addr.sin_family = AF_INET;
 	dst_addr.sin_port = htons(tcpconf->dport);
-	inet_aton(ipconf->dst, &dst_addr.sin_addr);
+	struct in_addr in = { ipconf->dst };
+	dst_addr.sin_addr = in;
 	memset(&dst_addr.sin_zero, '0', 8);
 
 	src_addr.sin_family = AF_INET;
 	src_addr.sin_port = htons(tcpconf->sport);
-	inet_aton(ipconf->src, &src_addr.sin_addr);
+	in.s_addr = ipconf->src;
+	src_addr.sin_addr = in;
 	memset(&src_addr.sin_zero, '0', 8);
 
 	ret = bind(*fd, (struct sockaddr*)&src_addr, sizeof(struct sockaddr));
@@ -182,3 +187,90 @@ void fill_tcphdr(packet_buffer_t *sendinfo, config_t *conf) {
 
 }
 
+/**
+ * calculates new checksum of network header
+ * cksum: old checksum
+ * newval: pointer to array which was changed
+ * oldval: pointer to array with original values
+ * n: length of changed portion
+ */
+void differential_chksum(ushort* cksum, ushort* newval, ushort* oldval, int n)
+{
+    int i;
+    int accumulate;
+
+    accumulate = *cksum;
+    for (i=0; i<n; i++)
+    {
+        accumulate -= *newval++;
+        accumulate += *oldval++;
+    }
+    if (accumulate < 0)
+    {
+        accumulate = -accumulate;
+        accumulate = (accumulate >> 16) + (accumulate & 0xffff);
+        accumulate += accumulate >> 16;
+        *cksum = (ushort) ~accumulate;
+    }
+    else
+    {
+        accumulate = (accumulate >> 16) + (accumulate & 0xffff);
+        accumulate += accumulate >> 16;
+        *cksum = (ushort)accumulate;
+    }
+}
+
+/**
+ * randomizes the contents of tcp and ip header
+ */
+void rand_tcp(config_t *conf, packet_buffer_t *p_buf)
+{
+	struct tcphdr* tcph = (struct tcphdr*)(p_buf->data_ptr+sizeof(struct ip));
+	if (conf->trans_proto_type==TYPE_TCP) {
+	    tcpconf_t* tcpconf = (tcpconf_t*)conf->trans_proto;
+	    if ((tcpconf->sport_low | tcpconf->sport_high) > 0) 
+	    {
+	        // modify sport of the IP header
+	        ushort port = htons(tcpconf->sport_low + (rand()%(tcpconf->sport_high-tcpconf->sport_low)));
+	               
+	        differential_chksum(&tcph->th_sum, &port, &tcph->th_sport, 1);
+	        tcph->th_sport = port;
+	    }
+	    if ((tcpconf->dport_low | tcpconf->dport_high) > 0) 
+	    {
+	        // modify dport of the IP header
+	        ushort port = htons(tcpconf->dport_low + (rand()%(tcpconf->dport_high-tcpconf->dport_low)));
+	        
+	        differential_chksum(&tcph->th_sum, &port, &tcph->th_dport, 1);
+	        tcph->th_dport = port;
+	    }
+	} else {
+		fprintf(stderr, "warning: transport protocol is not TCP, no randomization is supported!");
+		exit(10);
+	}
+    if (conf->net_proto_type==TYPE_IP4) {
+    	ip4conf_t* ipconf = (ip4conf_t*)conf->net_proto;
+    	struct iphdr* iph = (struct iphdr*)(p_buf->data_ptr);
+    	if (ipconf->dst_mask!=0xFFFFFFFF) {
+    		int dstip = (ipconf->dst&ipconf->dst_mask)|(~ipconf->dst_mask & rand());
+    		// correct checksum of ip header
+    		differential_chksum(&iph->check, (ushort*)&dstip, (ushort*)&iph->daddr, 2);
+    		// correct checksum of tcp header
+    		differential_chksum(&tcph->th_sum, (ushort*)&dstip, (ushort*)&iph->daddr, 2);
+    		iph->daddr = dstip;
+    	}
+    	if (ipconf->src_mask!=0xFFFFFFFF) {
+    		int srcip = (ipconf->dst&ipconf->src_mask)|(~ipconf->src_mask & rand());
+    		// correct checksum of ip header
+    		differential_chksum(&iph->check, (ushort*)&srcip, (ushort*)&iph->saddr, 2);
+    		// correct checksum of tcp header
+    		differential_chksum(&tcph->th_sum, (ushort*)&srcip, (ushort*)&iph->saddr, 2);
+    		iph->saddr = srcip;
+    	}
+    	
+    } else {
+		fprintf(stderr, "warning: network protocol is not IP4, no randomization is supported!");
+		exit(10);
+	}
+    
+}

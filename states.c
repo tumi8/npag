@@ -1,7 +1,7 @@
 /*
  * This file is part of
  * npag - Network Packet Generator
- * Copyright (C) 2005 Christian Bannes, University of Tübingen,
+ * Copyright (C) 2005 Christian Bannes, University of Tï¿½bingen,
  * Germany
  * 
  * npag is free software; you can redistribute it and/or
@@ -32,6 +32,7 @@
 
 
 #include <netinet/in.h> //IPPROTO_XXX
+#include <arpa/inet.h>
 
 
 extern int fp_line; /* line of FILE pointer */
@@ -64,7 +65,7 @@ void begin(char *word, config_t *conf, automata_t *automata) {
 void check_begin(config_t *conf) {
 	//fprintf(stderr, "check_begin..\n");
  	
- 	conf->next = (config_t*)cmalloc(sizeof(config_t));
+ 	conf->next = cmalloc(sizeof(config_t));
 	conf = conf->next;
 	conf->traffic.pattern = NULL;
 	conf->next = NULL;
@@ -73,9 +74,9 @@ void check_begin(config_t *conf) {
 	conf->net_proto_type = -1;
 	conf->ipproto = IPPROTO_RAW;
 	
-	tmpip_src = (struct addrinfo**)cmalloc(sizeof(struct addrinfo*));
-	tmpip_dst = (struct addrinfo**)cmalloc(sizeof(struct addrinfo*));
-	tmpipproto = (int*) cmalloc(sizeof(int));
+	tmpip_src = cmalloc(sizeof(struct addrinfo*));
+	tmpip_dst = cmalloc(sizeof(struct addrinfo*));
+	tmpipproto = cmalloc(sizeof(int));
 	*tmpipproto = IPPROTO_RAW;
 	
 }
@@ -142,7 +143,7 @@ void read_stream(char *word, char *val, config_t *conf, automata_t *automata) {
 
 void init_ip(config_t* conf) {
 	conf->net_proto_type = TYPE_IP4;
-	conf->net_proto = (ip4conf_t*)cmalloc(sizeof(ip4conf_t));
+	conf->net_proto = cmalloc(sizeof(ip4conf_t));
 	ip4conf_t *ip = conf->net_proto;
 	
 	//TODO this only makes sence if no options can be specified!
@@ -153,16 +154,20 @@ void init_ip(config_t* conf) {
 	ip->ttl = 120;
 	ip->id = 0;
 	ip->tos = 0;
+	
+	// ensure that no randomization is performed by default
+	ip->dst_mask = 0xFFFFFFFF;
+	ip->src_mask = 0xFFFFFFFF;
 
 }
 void check_ip(config_t* conf) {
 	ip4conf_t *ip = conf->net_proto;
 	
-	if(strcmp(ip->dst,"") == 0) {
+	if(ip->dst == 0) {
 		fprintf(stderr, "ERROR line %i: no IP destination address defined\n", word_line);
 		exit(0);
 	}
-	if(strcmp(ip->src,"") == 0) {
+	if(ip->src == 0) {
 		fprintf(stderr, "ERROR line %i: no IP source address defined\n", word_line);
 		exit(0);
 	}
@@ -174,7 +179,7 @@ void read_ip(char *word, char *val, config_t *conf, automata_t *automata) {
 
 	if(strcmp(word, "src") == 0) {
 		int ret;
-		strcpy(ip->src, val);
+		ip->src = inet_addr(val);
 
 		ret = getaddrinfo(val, NULL, NULL, &(*tmpip_src));
 		
@@ -185,13 +190,19 @@ void read_ip(char *word, char *val, config_t *conf, automata_t *automata) {
 	}
 	else if(strcmp(word, "dst") == 0) {
 		int ret;
-		strcpy(ip->dst, val);
+		ip->dst = inet_addr(val);
 
 		ret = getaddrinfo(val, NULL, NULL, &(*tmpip_dst));
 		if(ret != 0) {
 			perror("getaddrinfo src");
 			exit(0);
 		}
+	}
+	else if (strcmp(word, "src_mask") == 0) {
+		ip->src_mask = inet_addr(val);
+	}
+	else if (strcmp(word, "dst_mask") == 0) {
+		ip->dst_mask = inet_addr(val);
 	}
 	else if(strcmp(word, "ttl") == 0) {
 		ip->ttl = atoi(val);
@@ -265,7 +276,7 @@ void read_ip(char *word, char *val, config_t *conf, automata_t *automata) {
 
 void init_ip6(config_t* conf) {
 	conf->net_proto_type = TYPE_IP6;
-	conf->net_proto = (ip6conf_t*)cmalloc(sizeof(ip6conf_t));
+	conf->net_proto = cmalloc(sizeof(ip6conf_t));
 	ip6conf_t* ip6 = conf->net_proto;
 	ip6->traffic_class = 0;
 	ip6->flowlabel = 0;
@@ -338,7 +349,7 @@ void read_ip6(char *word, char *val, config_t *conf, automata_t *automata) {
 void init_icmp(config_t* conf) {
 	conf->trans_proto_type = TYPE_ICMP;
 	conf->ipproto = IPPROTO_ICMP; //TODO conf->trans_proto_type is actually the same...
-	conf->trans_proto = (icmpconf_t*)cmalloc(sizeof(icmpconf_t));
+	conf->trans_proto = cmalloc(sizeof(icmpconf_t));
 	icmpconf_t *icmp = conf->trans_proto;
 	icmp->type = 3;
 	icmp->code = 0;
@@ -388,7 +399,7 @@ void read_icmp(char *word, char *val, config_t *conf, automata_t *automata) {
 ----------------------------------------------------------------------------------------*/
 void init_icmp6(config_t *conf) {
 	conf->trans_proto_type = TYPE_ICMP6;
-	conf->trans_proto = (icmp6conf_t*)cmalloc(sizeof(icmp6conf_t));
+	conf->trans_proto = cmalloc(sizeof(icmp6conf_t));
 	icmp6conf_t* icmp6 = conf->trans_proto;
 	conf->ipproto = IPPROTO_ICMPV6;
 	icmp6->id = 0;
@@ -445,13 +456,19 @@ void init_tcp(config_t* conf) {
 	
 	conf->trans_proto_type = TYPE_TCP;
 	conf->ipproto = IPPROTO_TCP; //TODO conf->trans_proto_type is actually the same...
-	conf->trans_proto = (tcpconf_t*)cmalloc(sizeof(tcpconf_t));
+	conf->trans_proto = cmalloc(sizeof(tcpconf_t));
 	tcpconf_t* tcp = conf->trans_proto;
 	tcp->mss = 1500;
 	tcp->seq = 0;
 	tcp->win = 512;
 	tcp->urp = 0;
 	tcp->off = 5; //TODO this only makes sence if no options can be specified!
+    tcp->sport = 0;
+    tcp->sport_low = 0;
+    tcp->sport_high = 0;
+    tcp->dport = 0;
+    tcp->dport_low = 0;
+    tcp->dport_high = 0;
 	tcp->nodelay = FALSE;
 	*tmpipproto = IPPROTO_TCP;
 }
@@ -487,8 +504,24 @@ void read_tcp(char *word, char *val, config_t *conf, automata_t *automata) {
 	else if(strcmp(word, "sport") == 0) {
 		tcp->sport = atoi(val);
 	}
+	else if(strcmp(word, "sport_low") == 0) {
+		tcp->sport_low = atoi(val);
+        if (!tcp->sport_high) tcp->sport_high = tcp->sport_low;
+	}
+	else if(strcmp(word, "sport_high") == 0) {
+		tcp->sport_high = atoi(val);
+        if (!tcp->sport_low) tcp->sport_low = tcp->sport_high;
+	}
 	else if(strcmp(word, "dport") == 0) {
 		tcp->dport = atoi(val);
+	}
+	else if(strcmp(word, "dport_low") == 0) {
+		tcp->dport_low = atoi(val);
+        if (!tcp->dport_high) tcp->dport_high = tcp->dport_low;
+	}
+	else if(strcmp(word, "dport_high") == 0) {
+		tcp->dport_high = atoi(val);
+        if (!tcp->dport_low) tcp->dport_low = tcp->dport_high;
 	}
 
 	else if(strcmp(word, "seq") == 0) {
@@ -556,6 +589,15 @@ void read_tcp(char *word, char *val, config_t *conf, automata_t *automata) {
 		fprintf(stderr, "ERROR line %i: unknown parameter - %s\n", word_line, word);
 		exit(0);
 	}
+
+    if (tcp->sport_low > 0 && tcp->sport_high > 0 && tcp->sport_high < tcp->sport_low) {
+        fprintf(stdout, "ERROR: sport_low is higher than sport_high\n");
+        exit(2);
+    }
+    if (tcp->dport_low > 0 && tcp->dport_high > 0 && tcp->dport_high < tcp->dport_low) {
+        fprintf(stdout, "ERROR: dport_low is higher than dport_high\n");
+        exit(2);
+    }
 	
 }
 
@@ -566,7 +608,7 @@ void read_tcp(char *word, char *val, config_t *conf, automata_t *automata) {
 void init_udp(config_t* conf) {
 	conf->trans_proto_type = TYPE_UDP;
 	conf->ipproto = IPPROTO_UDP; //TODO conf->trans_proto_type is actually the same...
-	conf->trans_proto = (udpconf_t*)cmalloc(sizeof(udpconf_t));
+	conf->trans_proto = cmalloc(sizeof(udpconf_t));
 	udpconf_t* udp = conf->trans_proto;
 	udp->sport = 5000;
 	udp->len = 3;
@@ -660,7 +702,7 @@ void read_traffic(char *word, char *val, config_t *conf, automata_t *automata) {
 void init_pattern(config_t *conf) {
 		
 		if(conf->traffic.pattern == NULL) {
-			conf->traffic.pattern = (pattern_t*)cmalloc(sizeof(pattern_t));
+			conf->traffic.pattern = cmalloc(sizeof(pattern_t));
 			conf->traffic.pattern->next = NULL;
 		}
 		else {
@@ -669,7 +711,7 @@ void init_pattern(config_t *conf) {
 			while(pattern->next != NULL)
 				pattern = pattern->next;
 
-			pattern->next = (pattern_t*)cmalloc(sizeof(pattern_t));
+			pattern->next = cmalloc(sizeof(pattern_t));
 			pattern = pattern->next;
 			pattern->next = NULL;
 		}	

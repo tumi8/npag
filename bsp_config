@@ -39,7 +39,7 @@ stream {
 		burst {
 			send_packets = 2;
 			size = 1000;
-			repeat = 2;
+			repeat = 200;
 			delay = 0.2;
 		}
 		burst {

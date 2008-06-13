@@ -1,7 +1,7 @@
 /*
  * This file is part of
  * npag - Network Packet Generator
- * Copyright (C) 2005 Christian Bannes, University of Tübingen,
+ * Copyright (C) 2005 Christian Bannes, University of Tï¿½bingen,
  * Germany
  * 
  * npag is free software; you can redistribute it and/or
@@ -76,12 +76,14 @@ void init_udpsocket(sock_descriptor_t *fd, config_t *conf){
 
 	dst_addr.sin_family = AF_INET;
 	dst_addr.sin_port = htons(udpconf->dport);
-	inet_aton(ipconf->dst, &dst_addr.sin_addr);
+	struct in_addr in = { ipconf->dst };
+	dst_addr.sin_addr = in;
 	memset(&dst_addr.sin_zero, '0', 8);
 
 	src_addr.sin_family = AF_INET;
 	src_addr.sin_port = htons(udpconf->sport);
-	inet_aton(ipconf->src, &src_addr.sin_addr);
+	struct in_addr sin = { ipconf->src };
+	src_addr.sin_addr = sin;
 	memset(&src_addr.sin_zero, '0', 8);
 
 	ret = bind(*fd, (struct sockaddr*)&src_addr, sizeof(struct sockaddr));

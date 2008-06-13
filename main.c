@@ -24,7 +24,10 @@
 #include <pthread.h>
 #include <string.h> /* strcpy, memset */
 #include <stdlib.h> /* malloc */
+#include <signal.h>
 #include <unistd.h> //get_pid
+#include <sys/time.h>
+#include <time.h>
 
 #include "memory.h"
 #include "config.h"
@@ -40,6 +43,7 @@ void wait_for_threads	__P(());
 void* exec_thread			__P((void *traffic));
 void start_automata		__P((config_t *conf, FILE *fp));
 static void usage			__P(());
+void sig_handler(int x);
 
 void reg_table_init();
 void register_functions();
@@ -57,6 +61,11 @@ int num_of_threads = 0;
 FILE *output;
 int out = 0;
 
+uint stat_psentcount = 0;
+uint stat_psentsize = 0;
+struct timeval stat_starttime = {0,0};
+
+
 typedef struct thread_param {
 	config_t *conf;
 	int id;
@@ -64,6 +73,53 @@ typedef struct thread_param {
 
 
 
+    
+
+/* Subtract the `struct timeval' values X and Y,
+   storing the result in RESULT.
+   Return 1 if the difference is negative, otherwise 0.  
+   taken from http://www.delorie.com/gnu/docs/glibc/libc_428.html
+*/
+
+int timeval_subtract (struct timeval* result, struct timeval* x, struct timeval* y)
+{
+  /* Perform the carry for the later subtraction by updating y. */
+  if (x->tv_usec < y->tv_usec) {
+    int nsec = (y->tv_usec - x->tv_usec) / 1000000 + 1;
+    y->tv_usec -= 1000000 * nsec;
+    y->tv_sec += nsec;
+  }
+  if (x->tv_usec - y->tv_usec > 1000000) {
+    int nsec = (x->tv_usec - y->tv_usec) / 1000000;
+    y->tv_usec += 1000000 * nsec;
+    y->tv_sec -= nsec;
+  }
+
+  /* Compute the time remaining to wait.
+     tv_usec is certainly positive. */
+  result->tv_sec = x->tv_sec - y->tv_sec;
+  result->tv_usec = x->tv_usec - y->tv_usec;
+
+  /* Return 1 if result is negative. */
+  return x->tv_sec < y->tv_sec;
+}
+
+
+void print_stats()
+{
+    printf("Statistics:\n");
+    printf("Total number of packets sent: %u\n", stat_psentcount);
+    printf("Total size of data sent: %u\n", stat_psentsize);
+
+    struct timeval endtime;
+    struct timeval difftime;
+    gettimeofday(&endtime, 0);
+    timeval_subtract(&difftime, &endtime, &stat_starttime);
+    float dtime = difftime.tv_sec+(float)difftime.tv_usec/1000000;
+    printf("Elapsed time: %.3f seconds\n", dtime);
+    printf("Average bandwidth used: %.3f MByte/s\n", stat_psentsize/dtime/1024/1024);
+    printf("Average packet rate: %.1f packets/s\n", (float)stat_psentcount/dtime);
+}
 
 int main(int argc, char**argv) {
 
@@ -110,6 +166,17 @@ int main(int argc, char**argv) {
 		}
 	}
 
+    /* setup signal handler */
+	struct sigaction sig;
+	sig.sa_handler=sig_handler;
+	sig.sa_flags=SA_RESTART;
+	sigemptyset(&sig.sa_mask);
+	if (sigaction(SIGINT, &sig, NULL) != 0) 
+    {
+        perror("failed to set signal handler\n");
+        exit(2);
+    }
+
 
 	/* open script file for reading */
 	fp = fopen(filename, "r");
@@ -122,7 +189,8 @@ int main(int argc, char**argv) {
 	/* read the script file */
 	fprintf(stdout, "Reading configuration file...\n");
 
-	conf = (config_t*) cmalloc(sizeof(config_t));
+	conf = cmalloc(sizeof(config_t));
+	/*conf = (config_t*) cmalloc(sizeof(config_t));*/
 
 	/* the automata reads the script language from the
 	 * file and fills the conf structure  */
@@ -143,7 +211,8 @@ int main(int argc, char**argv) {
 	 * created */
 	 conf = conf->next;
 	while(conf != NULL) {
-		th_param = (thread_param_t*) cmalloc(sizeof(thread_param_t));
+		th_param = cmalloc(sizeof(thread_param_t));
+		/* th_param = (thread_param_t*) cmalloc(sizeof(thread_param_t));*/
 		th_param->conf = conf;
 		th_param->id = num_of_threads + 1;
 		num_of_threads++;
@@ -156,6 +225,8 @@ int main(int argc, char**argv) {
 	//  another thread could be chosen...
 	if(num_of_threads > 0)
 		wait_for_threads();
+
+    print_stats();
 	return 0;
 }
 
@@ -271,18 +342,10 @@ int set_payload(char *buf, int size, char *filename, int format, int pos) {
 }
 
 
+void sig_handler(int x)
+{
+    fprintf(stderr, "caught SIGINT, exiting ...\n");
+    print_stats();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+	exit(1);
+}

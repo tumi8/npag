@@ -1,7 +1,7 @@
 /*
  * This file is part of
  * npag - Network Packet Generator
- * Copyright (C) 2005 Christian Bannes, University of Tübingen,
+ * Copyright (C) 2005 Christian Bannes, University of Tï¿½bingen,
  * Germany
  * 
  * npag is free software; you can redistribute it and/or
@@ -58,7 +58,7 @@ void fill_icmp6hdr(packet_buffer_t *sendinfo, config_t *conf) {
 	icmp6h->icmp6_id = htons(icmp6conf->id);
 	icmp6h->icmp6_seq = htons(icmp6conf->seq);
 	
-	icmp6h->icmp6_cksum = checksum(icmp6h, buffer->data_size);
+	icmp6h->icmp6_cksum = checksum((u_int16_t*)icmp6h, buffer->data_size);
 }
 
 void fill_icmphdr(packet_buffer_t *sendinfo, config_t *conf) {
@@ -84,7 +84,7 @@ void fill_icmphdr(packet_buffer_t *sendinfo, config_t *conf) {
 	}
 		
 	
-	icmph->icmp_cksum = checksum(icmph, buffer->data_size);
+	icmph->icmp_cksum = checksum((u_int16_t*)icmph, buffer->data_size);
 
 }
 
