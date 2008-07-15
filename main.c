@@ -146,6 +146,7 @@ int main(int argc, char**argv) {
 				if(argv[0][2] == 'v')
 					verbose = 2;
 				break;
+			// steffi: hier "fast" parameter einfuegen
 			case 'o': /* next string specifies a filename */
 				out = 1;
 				strncpy(output_file,&argv[1][0] , MAXFILENAME);

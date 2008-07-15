@@ -274,3 +274,5 @@ void rand_tcp(config_t *conf, packet_buffer_t *p_buf)
 	}
     
 }
+
+// steffi: hier rand_tcp_fast einfuegen

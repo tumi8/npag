@@ -602,7 +602,7 @@ void register_functions() {
 	
 	/* raw */
 	
-	reg_proto(0, TYPE_TCP, TYPE_IP4, fill_tcphdr, fill_ip4hdr, init_rawsocket, rand_tcp);
+	reg_proto(0, TYPE_TCP, TYPE_IP4, fill_tcphdr, fill_ip4hdr, init_rawsocket, rand_tcp); // steffi
 	reg_proto(0, -1, TYPE_IP4, empty, fill_ip4hdr, init_rawsocket, NULL);
 	reg_proto(0, TYPE_TCP, TYPE_IP6, fill_tcphdr, fill_ip6hdr, init_rawsocket6, NULL);
 	reg_proto(0, TYPE_UDP, TYPE_IP4, fill_udphdr, fill_ip4hdr, init_rawsocket, NULL);
