@@ -65,6 +65,7 @@ extern int verbose;
 extern int num_of_threads;
 extern FILE *output;
 extern int out;
+extern int fast;
 extern pthread_cond_t master_wait;
 
 pthread_mutex_t send_mutex = PTHREAD_MUTEX_INITIALIZER;

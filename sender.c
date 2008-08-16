@@ -591,7 +591,7 @@ void empty(packet_buffer_t p, config_t c) {
 
 
 void register_functions() {
-	
+
 	/* registrations */
 	
 	/* kernel */
@@ -601,8 +601,10 @@ void register_functions() {
 	reg_proto(1, TYPE_UDP, TYPE_IP6, set_udpsockopts, set_ipsockopts, init_udpip6socket, NULL);
 	
 	/* raw */
-	
-	reg_proto(0, TYPE_TCP, TYPE_IP4, fill_tcphdr, fill_ip4hdr, init_rawsocket, rand_tcp); // steffi
+
+if (fast){ 
+	reg_proto(0, TYPE_TCP, TYPE_IP4, fill_tcphdr, fill_ip4hdr, init_rawsocket, rand_tcp_fast);}
+else{	reg_proto(0, TYPE_TCP, TYPE_IP4, fill_tcphdr, fill_ip4hdr, init_rawsocket, rand_tcp);} // steffi
 	reg_proto(0, -1, TYPE_IP4, empty, fill_ip4hdr, init_rawsocket, NULL);
 	reg_proto(0, TYPE_TCP, TYPE_IP6, fill_tcphdr, fill_ip6hdr, init_rawsocket6, NULL);
 	reg_proto(0, TYPE_UDP, TYPE_IP4, fill_udphdr, fill_ip4hdr, init_rawsocket, NULL);

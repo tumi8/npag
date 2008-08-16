@@ -57,6 +57,7 @@ pthread_mutex_t master_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define FALSE 0
 
 int verbose = 0;
+int fast = 1;
 int num_of_threads = 0;
 FILE *output;
 int out = 0;
@@ -129,7 +130,6 @@ int main(int argc, char**argv) {
 	char filename[MAXFILENAME];
 	char output_file[MAXFILENAME];
 	FILE *fp;
-
 	/* read input parameters */
 	if(argc < 3) {
 		usage();
@@ -147,6 +147,9 @@ int main(int argc, char**argv) {
 					verbose = 2;
 				break;
 			// steffi: hier "fast" parameter einfuegen
+			case 's':
+				fast = 1;
+				break;
 			case 'o': /* next string specifies a filename */
 				out = 1;
 				strncpy(output_file,&argv[1][0] , MAXFILENAME);
@@ -248,6 +251,7 @@ static void usage() {
 			"\t-vv even more outout\n"\
 			"\t-o [filename] specifies an output filename. Raw packets are\n" \
 			"\t              printed into the file in HEX format\n"
+			"\t-s faster random-function"
 	 );
 	exit(0);	
 }

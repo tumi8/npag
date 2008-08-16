@@ -33,7 +33,7 @@
 #include "sendinfo.h"
 #include "packet_buffer.h"
 #include "config.h"
-
+//#include "tcp_module.h"
 
 
 #define SIN6_LEN //required for compile-time tests
@@ -45,9 +45,22 @@ void 			__P(check_warning());
 typedef int sock_descriptor_t;
 
 typedef unsigned short ushort;
+static unsigned int srcipinc = 0x00000000;
+static int dstipinc = 0;
+static int srcportinc = 0;
+static int dstportinc = 0;
 
+int slow = 0;
+int shigh = 0;
+int dlow = 0;
+int dhigh = 0;
+int smask = 0;
+int dmask = 0;
 
-
+int srciprnd = 0;
+int dstiprnd = 0;
+int srcportrnd = 0;
+int dstportrnd = 0;
 
 void set_tcpsockopts(packet_buffer_t *sendinfo, config_t *conf){
 	tcpconf_t* tcpconf = conf->trans_proto;
@@ -265,14 +278,135 @@ void rand_tcp(config_t *conf, packet_buffer_t *p_buf)
     		differential_chksum(&iph->check, (ushort*)&srcip, (ushort*)&iph->saddr, 2);
     		// correct checksum of tcp header
     		differential_chksum(&tcph->th_sum, (ushort*)&srcip, (ushort*)&iph->saddr, 2);
-    		iph->saddr = srcip;
+   		iph->saddr = srcip;
     	}
-    	
     } else {
 		fprintf(stderr, "warning: network protocol is not IP4, no randomization is supported!");
 		exit(10);
 	}
-    
 }
 
-// steffi: hier rand_tcp_fast einfuegen
+void dst_port_inc(){
+	if(dstportinc == dhigh - dlow){
+		dstportinc = 0;
+		return;
+	}
+	dstportinc++;
+}
+
+void src_port_inc(){
+	if(srcportinc == shigh - slow){
+		srcportinc = 0;
+		if (dstportrnd == 1) dst_port_inc();
+		return;
+	}
+	srcportinc++;
+}
+
+void dst_ip_inc(){
+	if(dstipinc == dmask){
+		dstipinc = 0x00000000;
+		if(srcportrnd == 1) src_port_inc();
+		else if (dstportrnd == 1) dst_port_inc();
+		return;
+	}
+	dstipinc++;
+}
+
+void src_ip_inc(){
+	srcipinc++;
+	if (srcipinc == smask){
+		srcipinc = 0x00000000;
+		if(dstiprnd == 1) dst_ip_inc();
+		else if (srcportrnd == 1) src_port_inc();
+		else if (dstportrnd == 1) dst_port_inc();
+		return;
+	}
+	srcipinc++;
+}
+
+void rand_tcp_fast(config_t *conf, packet_buffer_t *p_buf)
+{
+        struct tcphdr* tcph = (struct tcphdr*)(p_buf->data_ptr+sizeof(struct ip));
+        if (conf->trans_proto_type==TYPE_TCP) {
+		tcpconf_t* tcpconf = (tcpconf_t*)conf->trans_proto;
+		if ((tcpconf->sport_low | tcpconf->sport_high) > 0)
+		{
+		srcportrnd = 1;
+		slow = tcpconf->sport_low;
+		shigh = tcpconf->sport_high;
+                // modify sport of the IP header
+			ushort port = htons(tcpconf->sport_low + (srcportinc%(tcpconf->sport_high-tcpconf->sport_low)));
+
+			differential_chksum(&tcph->th_sum, &port, &tcph->th_sport, 1);
+			tcph->th_sport = port;
+		if(srcportinc == shigh - slow) srcportinc = 0;
+		else srcportinc++;
+		}
+		if ((tcpconf->dport_low | tcpconf->dport_high) > 0)
+		{
+		dstportrnd = 1;
+		dlow = tcpconf->dport_low;
+		dhigh = tcpconf->dport_high;
+                // modify dport of the IP header
+			ushort port = htons(tcpconf->dport_low + (dstportinc%(tcpconf->dport_high-tcpconf->dport_low)));
+			
+			differential_chksum(&tcph->th_sum, &port, &tcph->th_dport, 1);
+			tcph->th_dport = port;
+		if(dstportinc == dhigh - dlow) dstportinc = 0;
+		else dstportinc++;
+		}
+	} else {
+		fprintf(stderr, "warning: transport protocol is not TCP, no randomization is supported!");
+		exit(10);
+	}
+	if (conf->net_proto_type==TYPE_IP4) {
+		ip4conf_t* ipconf = (ip4conf_t*)conf->net_proto;
+		struct iphdr* iph = (struct iphdr*)(p_buf->data_ptr);
+		if (ipconf->dst_mask!=0xFFFFFFFF) {
+			dstiprnd = 1;
+			dmask = ~ipconf->dst_mask;
+			//int dstip = (ipconf->dst&ipconf->dst_mask)|((~ipconf->dst_mask) & dstipinc);
+			int dstip = (ipconf->dst & ipconf->dst_mask) | ntohl(dstipinc);
+	                // correct checksum of ip header
+			differential_chksum(&iph->check, (ushort*)&dstip, (ushort*)&iph->daddr, 2);
+                        // correct checksum of tcp header
+			differential_chksum(&tcph->th_sum, (ushort*)&dstip, (ushort*)&iph->daddr, 2);
+			iph->daddr = dstip;
+			if (ntohl(dstipinc) == dmask) dstipinc = 0x00000000;
+			else dstipinc++;
+		}
+		if (ipconf->src_mask!=0xFFFFFFFF) {
+			srciprnd = 1;
+			smask =  ~ipconf->src_mask;
+			//int srcip = (ipconf->dst&ipconf->src_mask)|(~ipconf->src_mask & srcipinc);
+			int srcip = (ipconf->src_mask & ipconf->src) | ntohl(srcipinc);
+                        // correct checksum of ip header
+			differential_chksum(&iph->check, (ushort*)&srcip, (ushort*)&iph->saddr, 2);
+                        // correct checksum of tcp header
+			differential_chksum(&tcph->th_sum, (ushort*)&srcip, (ushort*)&iph->saddr, 2);
+			iph->saddr = srcip;
+			if (ntohl(srcipinc) == smask) srcipinc = 0x00000000;
+			else srcipinc++;
+			}
+	} else {
+		fprintf(stderr, "warning: network protocol is not IP4, no randomization is supported!");
+		exit(10);
+	}
+/*	if (srciprnd == 1){
+		src_ip_inc();
+		return;
+	}
+	if (dstiprnd == 1){
+		dst_ip_inc();
+		return;
+	}
+	if(srcportrnd == 1){
+		src_port_inc();
+		return;
+	}
+	if(dstportrnd == 1){
+		dst_port_inc();
+	}*/
+	
+}
